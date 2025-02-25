@@ -2,81 +2,81 @@ import tkinter as tk
 from tkinter import messagebox
 
 def decimal_to_binary(n, bits=8):
-    """Converts a decimal number to a binary string with two's complement representation."""
     if n < 0:
-        return format((1 << bits) + n, f'0{bits}b')
+        n = (1 << bits) + n  # Two's complement
     return format(n, f'0{bits}b')
 
-def booth_multiplication(multiplicand, multiplier, bits=8):
-    """Performs Booth's multiplication algorithm step by step."""
-    A = 0  # Accumulator
-    Q = multiplier  # Multiplier
-    M = multiplicand  # Multiplicand
-    Q_1 = 0  # Q-1 (initialized to 0)
-    count = bits  # Number of bits for processing
-    
-    steps = []
-    steps.append(f"Multiplicand (M): {decimal_to_binary(M, bits)} ({M})")
-    steps.append(f"Multiplier (Q):   {decimal_to_binary(Q, bits)} ({Q})")
-    steps.append("\nStep-by-step process:")
-    
+def binary_to_decimal(b):
+    if b[0] == '1':  # Negative number in two's complement
+        return -((1 << len(b)) - int(b, 2))
+    return int(b, 2)
+
+def add_binary(a, b, bits):
+    result = bin(int(a, 2) + int(b, 2))[2:].zfill(bits + 1)
+    return result[-bits:]  # Truncate to required bits
+
+def booth_algorithm(multiplicand, multiplier, bits=8):
+    M = decimal_to_binary(multiplicand, bits)
+    Q = decimal_to_binary(multiplier, bits)
+    A = '0' * bits
+    Q_1 = '0'
+    count = bits
+
+    steps = []  # List to store step-wise process
+    steps.append(f"Initial Values: A={A}, Q={Q}, Q-1={Q_1}, M={M}\n")
+
     while count > 0:
-        step_text = f"\nStep {bits - count + 1}:\n"
-        step_text += f"A: {decimal_to_binary(A, bits)}  Q: {decimal_to_binary(Q, bits)}  Q-1: {Q_1}\n"
+        steps.append(f"Step {bits - count + 1}: A={A}, Q={Q}, Q-1={Q_1}")
+        if Q[-1] + Q_1 == '10':
+            A = add_binary(A, decimal_to_binary(-multiplicand, bits), bits)
+            steps.append(f"  - Subtract M: A={A}")
+        elif Q[-1] + Q_1 == '01':
+            A = add_binary(A, decimal_to_binary(multiplicand, bits), bits)
+            steps.append(f"  - Add M: A={A}")
         
-        if (Q & 1 == 1 and Q_1 == 0):
-            A = A - M  # A = A - M
-            step_text += f"  -> Subtract M: A = {decimal_to_binary(A, bits)}\n"
-        elif (Q & 1 == 0 and Q_1 == 1):
-            A = A + M  # A = A + M
-            step_text += f"  -> Add M: A = {decimal_to_binary(A, bits)}\n"
-        
-        # Arithmetic Right Shift (ARS)
-        combined = (A << (bits + 1)) | (Q << 1) | Q_1  # Merge A, Q, and Q-1
-        combined >>= 1  # Shift Right
-        
-        A = (combined >> (bits + 1)) & ((1 << bits) - 1)  # Extract new A
-        Q = (combined >> 1) & ((1 << bits) - 1)  # Extract new Q
-        Q_1 = combined & 1  # Extract new Q-1
-        
-        steps.append(step_text)
+        # Arithmetic right shift
+        A_Q_Q1 = A + Q + Q_1
+        A_Q_Q1 = A_Q_Q1[0] + A_Q_Q1[: -1]  # Preserve sign bit
+        A, Q, Q_1 = A_Q_Q1[:bits], A_Q_Q1[bits:-1], A_Q_Q1[-1]
+        steps.append(f"  - Arithmetic Right Shift: A={A}, Q={Q}, Q-1={Q_1}\n")
         count -= 1
     
-    steps.append(f"\nFinal Result: A: {decimal_to_binary(A, bits)}  Q: {decimal_to_binary(Q, bits)}")
-    result = (A << bits) | Q
-    if result >= (1 << (2 * bits - 1)):
-        result -= (1 << (2 * bits))  # Convert from two's complement
-    
-    steps.append(f"Final result (Binary): {decimal_to_binary(result, bits * 2)}")
-    steps.append(f"Final result (Decimal): {result}")
-    return "\n".join(steps)
+    result = binary_to_decimal(A + Q)
+    steps.append(f"Final Result: A={A}, Q={Q}, Decimal={result}")
+    return result, '\n'.join(steps)
 
 def calculate():
     try:
-        multiplicand = int(entry_m.get())
-        multiplier = int(entry_q.get())
-        max_bits = max(multiplicand.bit_length(), multiplier.bit_length()) + 1
-        result = booth_multiplication(multiplicand, multiplier, max_bits)
-        text_output.delete('1.0', tk.END)
-        text_output.insert(tk.END, result)
+        multiplicand = int(entry_multiplicand.get())
+        multiplier = int(entry_multiplier.get())
+        bits = max(len(bin(abs(multiplicand))) - 2, len(bin(abs(multiplier))) - 2, 8)
+        result, steps = booth_algorithm(multiplicand, multiplier, bits)
+        label_result.config(text=f"Result: {result}")
+        text_steps.delete("1.0", tk.END)
+        text_steps.insert(tk.END, steps)
     except ValueError:
         messagebox.showerror("Input Error", "Please enter valid integers")
 
-# Create UI
+# GUI Setup
 root = tk.Tk()
-root.title("Booth's Algorithm Simulator")
+root.title("Booth's Algorithm Multiplier")
 
-tk.Label(root, text="Enter Multiplicand (M):").grid(row=0, column=0)
-entry_m = tk.Entry(root)
-entry_m.grid(row=0, column=1)
+frame = tk.Frame(root, padx=20, pady=20)
+frame.pack()
 
-tk.Label(root, text="Enter Multiplier (Q):").grid(row=1, column=0)
-entry_q = tk.Entry(root)
-entry_q.grid(row=1, column=1)
+tk.Label(frame, text="Multiplicand:").grid(row=0, column=0)
+entry_multiplicand = tk.Entry(frame)
+entry_multiplicand.grid(row=0, column=1)
 
-tk.Button(root, text="Calculate", command=calculate).grid(row=2, column=0, columnspan=2)
+tk.Label(frame, text="Multiplier:").grid(row=1, column=0)
+entry_multiplier = tk.Entry(frame)
+entry_multiplier.grid(row=1, column=1)
 
-text_output = tk.Text(root, height=20, width=50)
-text_output.grid(row=3, column=0, columnspan=2)
+tk.Button(frame, text="Calculate", command=calculate).grid(row=2, columnspan=2)
+label_result = tk.Label(frame, text="Result:")
+label_result.grid(row=3, columnspan=2)
+
+text_steps = tk.Text(frame, height=10, width=50)
+text_steps.grid(row=4, columnspan=2)
 
 root.mainloop()
